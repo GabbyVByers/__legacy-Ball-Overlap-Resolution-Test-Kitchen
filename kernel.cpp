@@ -157,9 +157,7 @@ void InteropOpenGL::executeKernels(SimulationState& simState)
     int BALLS_threadsPerBlock = 256;
     int BALLS_blocksPerGrid = (simState.balls.size + BALLS_threadsPerBlock - 1) / BALLS_threadsPerBlock;
 
-
-    simState.oddEven++;
-    for (int i = 0; i < (32 + (simState.oddEven % 2)); i++)
+    for (int i = 0; i < 16; i++)
     {
         resolveWallCollisions KERNEL_DIM(BALLS_blocksPerGrid, BALLS_threadsPerBlock)(simState); cudaDeviceSynchronize();
         for (int j = 0; j < 8; j++)
