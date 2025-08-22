@@ -33,7 +33,7 @@ inline void initSimulation(std::tuple<int, int> screenDim, SimulationState& simS
     for (int i = 0; i < numBalls; i++)
     {
         Ball ball;
-        ball.radius = 0.03f;
+        ball.radius = randomFloat(0.02f, 0.04f);
         ball.currPos.x = randomFloat(-simState.max_u, simState.max_u);
         ball.currPos.y = randomFloat(-1.0f, 1.0f);
         simState.balls.add(ball);
