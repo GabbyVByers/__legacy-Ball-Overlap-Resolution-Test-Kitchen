@@ -76,7 +76,6 @@ __global__ void applyDisplacementKernel(SimulationState simState)
 
     SharedArray<Ball>& balls = simState.balls;
     Ball& ball = balls.devPtr[index];
-    //ball.currPos = ball.currPos + (ball.displacement * (1.0f / (float)ball.numFriends));
     if (ball.numFriends != 0)
         ball.currPos = ball.currPos + (ball.displacement / (float)ball.numFriends);
 }
@@ -157,10 +156,10 @@ void InteropOpenGL::executeKernels(SimulationState& simState)
     int BALLS_threadsPerBlock = 256;
     int BALLS_blocksPerGrid = (simState.balls.size + BALLS_threadsPerBlock - 1) / BALLS_threadsPerBlock;
 
-    for (int i = 0; i < 16; i++)
+    for (int i = 0; i < 32; i++)
     {
         resolveWallCollisions KERNEL_DIM(BALLS_blocksPerGrid, BALLS_threadsPerBlock)(simState); cudaDeviceSynchronize();
-        for (int j = 0; j < 8; j++)
+        for (int j = 0; j < 4; j++)
         {
             overlapResolutionKernel KERNEL_DIM(BALLS_blocksPerGrid, BALLS_threadsPerBlock)(simState); cudaDeviceSynchronize();
             applyDisplacementKernel KERNEL_DIM(BALLS_blocksPerGrid, BALLS_threadsPerBlock)(simState); cudaDeviceSynchronize();
