@@ -6,6 +6,7 @@
 
 struct Ball
 {
+    uchar4 color;
     Vec2f currPos;
     Vec2f displacement;
     float radius = 0.0f;
@@ -33,6 +34,7 @@ inline void initSimulation(std::tuple<int, int> screenDim, SimulationState& simS
     for (int i = 0; i < numBalls; i++)
     {
         Ball ball;
+        ball.color = make_uchar4(rand() % 255, rand() % 255, rand() % 255, 255);
         ball.radius = randomFloat(0.02f, 0.04f);
         ball.currPos.x = randomFloat(-simState.max_u, simState.max_u);
         ball.currPos.y = randomFloat(-1.0f, 1.0f);
