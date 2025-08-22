@@ -159,15 +159,18 @@ void InteropOpenGL::executeKernels(SimulationState& simState)
 
 
     simState.oddEven++;
-    for (int i = 0; i < (128 + (simState.oddEven % 2)); i++)
+    for (int i = 0; i < (32 + (simState.oddEven % 2)); i++)
     {
-        resolveWallCollisions   KERNEL_DIM(BALLS_blocksPerGrid, BALLS_threadsPerBlock)(simState); cudaDeviceSynchronize();
-        overlapResolutionKernel KERNEL_DIM(BALLS_blocksPerGrid, BALLS_threadsPerBlock)(simState); cudaDeviceSynchronize();
-        applyDisplacementKernel KERNEL_DIM(BALLS_blocksPerGrid, BALLS_threadsPerBlock)(simState); cudaDeviceSynchronize();
+        resolveWallCollisions KERNEL_DIM(BALLS_blocksPerGrid, BALLS_threadsPerBlock)(simState); cudaDeviceSynchronize();
+        for (int j = 0; j < 8; j++)
+        {
+            overlapResolutionKernel KERNEL_DIM(BALLS_blocksPerGrid, BALLS_threadsPerBlock)(simState); cudaDeviceSynchronize();
+            applyDisplacementKernel KERNEL_DIM(BALLS_blocksPerGrid, BALLS_threadsPerBlock)(simState); cudaDeviceSynchronize();
+        }
     }
 
-    debugKernel   KERNEL_DIM(BALLS_blocksPerGrid, BALLS_threadsPerBlock)(simState); cudaDeviceSynchronize();
-    renderKernel  KERNEL_DIM(PIXLS_blocksPerGrid, PIXLS_threadsPerBlock)(simState); cudaDeviceSynchronize();
+    debugKernel KERNEL_DIM(BALLS_blocksPerGrid, BALLS_threadsPerBlock)(simState); cudaDeviceSynchronize();
+    renderKernel KERNEL_DIM(PIXLS_blocksPerGrid, PIXLS_threadsPerBlock)(simState); cudaDeviceSynchronize();
     debugCompress KERNEL_DIM(BALLS_blocksPerGrid, BALLS_threadsPerBlock)(simState, 1.0f); cudaDeviceSynchronize();
 }
 
