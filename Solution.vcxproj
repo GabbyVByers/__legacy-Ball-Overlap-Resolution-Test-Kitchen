@@ -91,7 +91,6 @@
     <ClCompile Include="glad.c" />
     <CudaCompile Include="input.cpp" />
     <CudaCompile Include="kernel.cpp" />
-    <CudaCompile Include="gui.cpp" />
     <ClCompile Include="imgui\imgui.cpp" />
     <ClCompile Include="imgui\imgui_demo.cpp" />
     <ClCompile Include="imgui\imgui_draw.cpp" />

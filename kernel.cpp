@@ -2,133 +2,83 @@
 #include "opengl.h"
 #define KERNEL_DIM(x, y) <<<x, y>>>
 
-__device__ Vec2f getBallVelocity(Ball& ball, float dt)
+__device__ bool isClippingWalls(Ball& ball, float max_u)
 {
-    Vec2f newPos = (ball.prevPos * -1.0f) + (ball.currPos * 2.0f) + (ball.acceleration * dt * dt);
-    Vec2f velocity = (newPos - ball.prevPos) / (2.0f * dt);
-    return velocity;
+    if (ball.currPos.y - ball.radius < -1.0f)  return true;
+    if (ball.currPos.y + ball.radius > 1.0f)   return true;
+    if (ball.currPos.x - ball.radius < -max_u) return true;
+    if (ball.currPos.x + ball.radius > max_u)  return true;
+    return false;
 }
 
-__device__ void setBallVelocity(Ball& ball, Vec2f velocity, float dt)
-{
-    ball.prevPos = ball.currPos - (velocity * dt) + (ball.acceleration * 0.5f * dt * dt);
-}
-
-__device__ Vec2f getBallVelocity_fromNew(Ball& ball, float dt)
-{
-    Vec2f newPos = (ball.new_prevPos * -1.0f) + (ball.new_currPos * 2.0f) + (ball.acceleration * dt * dt);
-    Vec2f velocity = (newPos - ball.new_prevPos) / (2.0f * dt);
-    return velocity;
-}
-
-__device__ void setBallVelocity_fromNew(Ball& ball, Vec2f velocity, float dt)
-{
-    ball.new_prevPos = ball.new_currPos - (velocity * dt) + (ball.acceleration * 0.5f * dt * dt);
-}
-
-__global__ void wallCollisionKernel(SimulationState simState)
+__global__ void resolveWallCollisions(SimulationState simState)
 {
     int index = (blockIdx.x * blockDim.x) + threadIdx.x;
     if (index >= simState.balls.size) return;
 
     SharedArray<Ball>& balls = simState.balls;
     Ball& ball = balls.devPtr[index];
-    float dt = simState.dt;
 
-    if (ball.currPos.y - ball.radius < -1.0f) // floor
-    {
-        Vec2f currVelocity = getBallVelocity(ball, dt);
-        Vec2f newVelocity = Vec2f{ currVelocity.x, fabs(currVelocity.y) };
-        newVelocity = newVelocity * simState.wallCollisionDampening;
+    if (ball.currPos.y - ball.radius < -1.0f)
         ball.currPos.y = -1.0f + ball.radius;
-        setBallVelocity(ball, newVelocity, dt);
-    }
-
-    if (ball.currPos.y + ball.radius > 1.0f) // ceiling
-    {
-        Vec2f currVelocity = getBallVelocity(ball, dt);
-        Vec2f newVelocity = Vec2f{ currVelocity.x, -fabs(currVelocity.y) };
-        newVelocity = newVelocity * simState.wallCollisionDampening;
+    if (ball.currPos.y + ball.radius > 1.0f)
         ball.currPos.y = 1.0f - ball.radius;
-        setBallVelocity(ball, newVelocity, dt);
-    }
-
-    if (ball.currPos.x - ball.radius < -simState.max_u) // left wall
-    {
-        Vec2f currVelocity = getBallVelocity(ball, dt);
-        Vec2f newVelocity = Vec2f{ fabs(currVelocity.x), currVelocity.y };
-        newVelocity = newVelocity * simState.wallCollisionDampening;
+    if (ball.currPos.x - ball.radius < -simState.max_u)
         ball.currPos.x = -simState.max_u + ball.radius;
-        setBallVelocity(ball, newVelocity, dt);
-    }
-
-    if (ball.currPos.x + ball.radius > simState.max_u) // right wall
-    {
-        Vec2f currVelocity = getBallVelocity(ball, dt);
-        Vec2f newVelocity = Vec2f{ -fabs(currVelocity.x), currVelocity.y };
-        newVelocity = newVelocity * simState.wallCollisionDampening;
+    if (ball.currPos.x + ball.radius > simState.max_u)
         ball.currPos.x = simState.max_u - ball.radius;
-        setBallVelocity(ball, newVelocity, dt);
-    }
 }
 
-__global__ void ballCollisionKernel(SimulationState simState)
+__global__ void debugCompress(SimulationState simState, float mult)
 {
     int index = (blockIdx.x * blockDim.x) + threadIdx.x;
     if (index >= simState.balls.size) return;
 
     SharedArray<Ball>& balls = simState.balls;
     Ball& ball = balls.devPtr[index];
-    
-    ball.new_currPos = ball.currPos;
-    ball.new_prevPos = ball.prevPos;
-    ball.wasCrowded = false;
+
+    ball.currPos.y = ball.currPos.y - (0.005f * mult);
+}
+
+__global__ void overlapResolutionKernel(SimulationState simState)
+{
+    int index = (blockIdx.x * blockDim.x) + threadIdx.x;
+    if (index >= simState.balls.size) return;
+
+    SharedArray<Ball>& balls = simState.balls;
+    Ball& ball = balls.devPtr[index];
+    ball.displacement = Vec2f{ 0.0f, 0.0f };
 
     for (int i = 0; i < balls.size; i++)
     {
         if (i == index) continue;
         Ball& otherBall = balls.devPtr[i];
 
-        Vec2f difference = ball.new_currPos - otherBall.currPos;
+        Vec2f difference = ball.currPos - otherBall.currPos;
         float radiuses = ball.radius + otherBall.radius;
-        if (lengthSquared(difference) > (radiuses * radiuses)) continue;
-        ball.wasCrowded = true;
         float distance = length(difference);
-        if (distance < 0.0000001f) continue;
-        
-        // elastic collision
-        float dt = simState.dt;
-        Vec2f V1 = getBallVelocity_fromNew(ball, dt);
-        Vec2f V2 = getBallVelocity(otherBall, dt);
-        float M1 = ball.mass;
-        float M2 = otherBall.mass;
-        Vec2f P1 = ball.new_currPos;
-        Vec2f P2 = otherBall.currPos;
-        Vec2f newVelocity = V1 - ((P1 - P2) * (((2.0f * M2) / (M1 + M2)) * (dot(V1 - V2, P1 - P2) / lengthSquared(P1 - P2))));
-        newVelocity = newVelocity * simState.ballCollisionDampening;
+        if (distance > radiuses) continue;
+        if (distance < 0.00001f) continue;
 
-        // force apart
-        float overlap = radiuses - distance;
+        float overlap = (radiuses - distance);
+        
         normalize(difference);
-        Vec2f directionOffset = difference * overlap;
-        ball.new_currPos = ball.new_currPos + directionOffset;
-        setBallVelocity_fromNew(ball, newVelocity, dt);
+        ball.displacement = ball.displacement + (difference * (overlap * 1.0f));
+        //break;
     }
 }
 
-__global__ void confirmCollisionKernel(SimulationState simState)
+__global__ void applyDisplacementKernel(SimulationState simState)
 {
     int index = (blockIdx.x * blockDim.x) + threadIdx.x;
     if (index >= simState.balls.size) return;
 
     SharedArray<Ball>& balls = simState.balls;
     Ball& ball = balls.devPtr[index];
-
-    ball.currPos = ball.new_currPos;
-    ball.prevPos = ball.new_prevPos;
+    ball.currPos = ball.currPos + ball.displacement;
 }
 
-__global__ void stepPhysicsKernel(SimulationState simState)
+__global__ void debugKernel(SimulationState simState)
 {
     int index = (blockIdx.x * blockDim.x) + threadIdx.x;
     if (index >= simState.balls.size) return;
@@ -136,10 +86,22 @@ __global__ void stepPhysicsKernel(SimulationState simState)
     SharedArray<Ball>& balls = simState.balls;
     Ball& ball = balls.devPtr[index];
 
-    ball.acceleration = Vec2f{ 0.0f, -simState.gravity };
-    Vec2f newPos = (ball.prevPos * -1.0f) + (ball.currPos * 2.0f) + (ball.acceleration * simState.dt * simState.dt);
-    ball.prevPos = ball.currPos;
-    ball.currPos = newPos;
+    float max_u = simState.max_u;
+    ball.isClipping_Wall = isClippingWalls(ball, max_u);
+
+    ball.isClipping_Ball = false;
+    for (int i = 0; i < balls.size; i++)
+    {
+        if (ball.isClipping_Ball == true) break;
+        if (i == index) continue;
+        Ball& otherBall = balls.devPtr[i];
+
+        float radiuses = ball.radius + otherBall.radius;
+        Vec2f difference = ball.currPos - otherBall.currPos;
+        float distance = length(difference);
+        if (distance > radiuses) continue;
+        ball.isClipping_Ball = true;
+    }
 }
 
 __global__ void renderKernel(SimulationState simState)
@@ -157,6 +119,8 @@ __global__ void renderKernel(SimulationState simState)
     Vec2f pixelPos = Vec2f{ u,v };
 
     uchar4 red = make_uchar4(255, 0, 0, 255);
+    uchar4 blue = make_uchar4(0, 0, 255, 255);
+    uchar4 purple = make_uchar4(255, 0, 255, 255);
     uchar4 white = make_uchar4(255, 255, 255, 255);
 
     SharedArray<Ball>& balls = simState.balls;
@@ -166,7 +130,11 @@ __global__ void renderKernel(SimulationState simState)
         Vec2f relBallPos = ball.currPos - pixelPos;
         if (length(relBallPos) < ball.radius)
         {
-            simState.pixels[index] = (ball.wasCrowded) ? red : white;
+            uchar4 color = white;
+            if (ball.isClipping_Ball) color = red;
+            if (ball.isClipping_Wall) color = blue;
+            if (ball.isClipping_Ball && ball.isClipping_Wall) color = purple;
+            simState.pixels[index] = color;
             return;
         }
     }
@@ -185,10 +153,67 @@ void InteropOpenGL::executeKernels(SimulationState& simState)
     int BALLS_threadsPerBlock = 256;
     int BALLS_blocksPerGrid = (simState.balls.size + BALLS_threadsPerBlock - 1) / BALLS_threadsPerBlock;
 
-    wallCollisionKernel    KERNEL_DIM(BALLS_blocksPerGrid, BALLS_threadsPerBlock)(simState); cudaDeviceSynchronize();
-    ballCollisionKernel    KERNEL_DIM(BALLS_blocksPerGrid, BALLS_threadsPerBlock)(simState); cudaDeviceSynchronize();
-    confirmCollisionKernel KERNEL_DIM(BALLS_blocksPerGrid, BALLS_threadsPerBlock)(simState); cudaDeviceSynchronize();
-    stepPhysicsKernel      KERNEL_DIM(BALLS_blocksPerGrid, BALLS_threadsPerBlock)(simState); cudaDeviceSynchronize();
-    renderKernel           KERNEL_DIM(PIXLS_blocksPerGrid, PIXLS_threadsPerBlock)(simState); cudaDeviceSynchronize();
+    for (int i = 0; i < 64; i++)
+    {
+        resolveWallCollisions KERNEL_DIM(BALLS_blocksPerGrid, BALLS_threadsPerBlock)(simState); cudaDeviceSynchronize();
+        overlapResolutionKernel KERNEL_DIM(BALLS_blocksPerGrid, BALLS_threadsPerBlock)(simState); cudaDeviceSynchronize();
+        applyDisplacementKernel KERNEL_DIM(BALLS_blocksPerGrid, BALLS_threadsPerBlock)(simState); cudaDeviceSynchronize();
+    }
+
+    debugKernel  KERNEL_DIM(BALLS_blocksPerGrid, BALLS_threadsPerBlock)(simState); cudaDeviceSynchronize();
+    renderKernel KERNEL_DIM(PIXLS_blocksPerGrid, PIXLS_threadsPerBlock)(simState); cudaDeviceSynchronize();
+
+    debugCompress KERNEL_DIM(BALLS_blocksPerGrid, BALLS_threadsPerBlock)(simState, 1.0f); cudaDeviceSynchronize();
+}
+
+void InteropOpenGL::initImGui()
+{
+    IMGUI_CHECKVERSION();
+    ImGui::CreateContext();
+    ImGuiIO& io = ImGui::GetIO();
+    io.FontGlobalScale = 2.0f;
+    ImGui::StyleColorsDark();
+    ImGui_ImplGlfw_InitForOpenGL(window, true);
+    ImGui_ImplOpenGL3_Init("#version 330");
+}
+
+void InteropOpenGL::renderImGui(SimulationState& simState)
+{
+    ImGui_ImplOpenGL3_NewFrame();
+    ImGui_ImplGlfw_NewFrame();
+    ImGui::NewFrame();
+    
+    ImGui::Begin("Debugger");
+    ImGui::Button("Resolve Wall Collision");
+    if (ImGui::IsItemHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+    {
+        int BALLS_threadsPerBlock = 256;
+        int BALLS_blocksPerGrid = (simState.balls.size + BALLS_threadsPerBlock - 1) / BALLS_threadsPerBlock;
+        resolveWallCollisions KERNEL_DIM(BALLS_blocksPerGrid, BALLS_threadsPerBlock)(simState); cudaDeviceSynchronize();
+        std::cout << "HERE1\n";
+    }
+
+    ImGui::Button("Resolve Overlaping");
+    if (ImGui::IsItemHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+    {
+        int BALLS_threadsPerBlock = 256;
+        int BALLS_blocksPerGrid = (simState.balls.size + BALLS_threadsPerBlock - 1) / BALLS_threadsPerBlock;
+        overlapResolutionKernel KERNEL_DIM(BALLS_blocksPerGrid, BALLS_threadsPerBlock)(simState); cudaDeviceSynchronize();
+        applyDisplacementKernel KERNEL_DIM(BALLS_blocksPerGrid, BALLS_threadsPerBlock)(simState); cudaDeviceSynchronize();
+        std::cout << "HERE2\n";
+    }
+
+    ImGui::Button("Debug Compress");
+    if (ImGui::IsItemHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+    {
+        int BALLS_threadsPerBlock = 256;
+        int BALLS_blocksPerGrid = (simState.balls.size + BALLS_threadsPerBlock - 1) / BALLS_threadsPerBlock;
+        debugCompress KERNEL_DIM(BALLS_blocksPerGrid, BALLS_threadsPerBlock)(simState, 5.0f); cudaDeviceSynchronize();
+        std::cout << "HERE2\n";
+    }
+
+    ImGui::End();
+    ImGui::Render();
+    ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 }
 

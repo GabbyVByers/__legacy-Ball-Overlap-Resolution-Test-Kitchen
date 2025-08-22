@@ -4,7 +4,7 @@
 
 int main()
 {
-    bool fullScreen = true;
+    bool fullScreen = false;
     InteropOpenGL OpenGL(1920, 1080, "Cuda OpenGL Interop", fullScreen);
     OpenGL.disableVSYNC();
 

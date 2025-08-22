@@ -24,9 +24,6 @@
     <CudaCompile Include="opengl.h">
       <Filter>Header Files</Filter>
     </CudaCompile>
-    <CudaCompile Include="gui.cpp">
-      <Filter>Source Files</Filter>
-    </CudaCompile>
     <CudaCompile Include="kernel.cpp">
       <Filter>Source Files</Filter>
     </CudaCompile>
