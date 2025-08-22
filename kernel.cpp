@@ -63,7 +63,7 @@ __global__ void overlapResolutionKernel(SimulationState simState)
         float overlap = (radiuses - distance);
         
         normalize(difference);
-        ball.displacement = ball.displacement + (difference * (overlap * 1.0f));
+        ball.displacement = ball.displacement + (difference * (overlap * 0.5f));
         //break;
     }
 }
