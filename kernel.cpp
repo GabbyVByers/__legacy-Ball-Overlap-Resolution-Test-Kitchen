@@ -54,7 +54,7 @@ __global__ void overlapResolutionKernel(SimulationState simState)
         if (i == index) continue;
         Ball& otherBall = balls.devPtr[i];
 
-        Vec2f difference = (ball.currPos + ball.displacement) - otherBall.currPos;
+        Vec2f difference = ball.currPos - otherBall.currPos;
         float radiuses = ball.radius + otherBall.radius;
         float distance = length(difference);
         if (distance > radiuses) continue;
@@ -74,7 +74,7 @@ __global__ void applyDisplacementKernel(SimulationState simState)
 
     SharedArray<Ball>& balls = simState.balls;
     Ball& ball = balls.devPtr[index];
-    ball.currPos = ball.currPos + ball.displacement;
+    ball.currPos = ball.currPos + (ball.displacement * 0.5f);
 }
 
 __global__ void debugKernel(SimulationState simState)
@@ -153,7 +153,7 @@ void InteropOpenGL::executeKernels(SimulationState& simState)
     int BALLS_threadsPerBlock = 256;
     int BALLS_blocksPerGrid = (simState.balls.size + BALLS_threadsPerBlock - 1) / BALLS_threadsPerBlock;
 
-    for (int i = 0; i < 128; i++)
+    for (int i = 0; i < 64; i++)
     {
         resolveWallCollisions   KERNEL_DIM(BALLS_blocksPerGrid, BALLS_threadsPerBlock)(simState); cudaDeviceSynchronize();
         overlapResolutionKernel KERNEL_DIM(BALLS_blocksPerGrid, BALLS_threadsPerBlock)(simState); cudaDeviceSynchronize();
