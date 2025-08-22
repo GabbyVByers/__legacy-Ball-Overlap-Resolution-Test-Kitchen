@@ -6,10 +6,12 @@
 
 struct Ball
 {
-    uchar4 color;
+    uchar4 color = make_uchar4(255, 255, 255, 255);
     Vec2f currPos;
     Vec2f displacement;
     float radius = 0.0f;
+    
+    int numFriends = 0;
     bool isClipping_Ball = false;
     bool isClipping_Wall = false;
 };
@@ -22,6 +24,9 @@ struct SimulationState
     float max_u = 0.0f;
     uchar4* pixels = nullptr;
     SharedArray<Ball> balls;
+
+    //device
+    unsigned int oddEven = 0;
 };
 
 inline void initSimulation(std::tuple<int, int> screenDim, SimulationState& simState)
@@ -30,7 +35,7 @@ inline void initSimulation(std::tuple<int, int> screenDim, SimulationState& simS
     simState.screenHeight = std::get<1>(screenDim);
     simState.max_u = (simState.screenWidth / (float)simState.screenHeight);;
 
-    int numBalls = 1000;
+    int numBalls = 400;
     for (int i = 0; i < numBalls; i++)
     {
         Ball ball;

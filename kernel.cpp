@@ -48,22 +48,24 @@ __global__ void overlapResolutionKernel(SimulationState simState)
     SharedArray<Ball>& balls = simState.balls;
     Ball& ball = balls.devPtr[index];
     ball.displacement = Vec2f{ 0.0f, 0.0f };
+    ball.numFriends = 0;
 
     for (int i = 0; i < balls.size; i++)
     {
         if (i == index) continue;
-        Ball& otherBall = balls.devPtr[i];
 
+        Ball& otherBall = balls.devPtr[i];
         Vec2f difference = ball.currPos - otherBall.currPos;
         float radiuses = ball.radius + otherBall.radius;
         float distance = length(difference);
+
         if (distance > radiuses) continue;
         if (distance < 0.00001f) continue;
 
         float overlap = (radiuses - distance);
-        
         normalize(difference);
-        ball.displacement = ball.displacement + (difference * (overlap * 0.5f));
+        ball.displacement = ball.displacement + (difference * (overlap * 0.55f));
+        ball.numFriends++;
     }
 }
 
@@ -74,7 +76,9 @@ __global__ void applyDisplacementKernel(SimulationState simState)
 
     SharedArray<Ball>& balls = simState.balls;
     Ball& ball = balls.devPtr[index];
-    ball.currPos = ball.currPos + (ball.displacement * 0.5f);
+    //ball.currPos = ball.currPos + (ball.displacement * (1.0f / (float)ball.numFriends));
+    if (ball.numFriends != 0)
+        ball.currPos = ball.currPos + (ball.displacement / (float)ball.numFriends);
 }
 
 __global__ void debugKernel(SimulationState simState)
@@ -153,7 +157,9 @@ void InteropOpenGL::executeKernels(SimulationState& simState)
     int BALLS_threadsPerBlock = 256;
     int BALLS_blocksPerGrid = (simState.balls.size + BALLS_threadsPerBlock - 1) / BALLS_threadsPerBlock;
 
-    for (int i = 0; i < 16; i++)
+
+    simState.oddEven++;
+    for (int i = 0; i < (128 + (simState.oddEven % 2)); i++)
     {
         resolveWallCollisions   KERNEL_DIM(BALLS_blocksPerGrid, BALLS_threadsPerBlock)(simState); cudaDeviceSynchronize();
         overlapResolutionKernel KERNEL_DIM(BALLS_blocksPerGrid, BALLS_threadsPerBlock)(simState); cudaDeviceSynchronize();
