@@ -132,12 +132,12 @@ __global__ void renderKernel(SimulationState simState)
         Vec2f relBallPos = ball.currPos - pixelPos;
         if (length(relBallPos) < ball.radius)
         {
-            uchar4 color = white;
-            if (ball.isClipping_Ball) color = red;
-            if (ball.isClipping_Wall) color = blue;
-            if (ball.isClipping_Ball && ball.isClipping_Wall) color = purple;
-            simState.pixels[index] = color;
-            //simState.pixels[index] = ball.color;
+            //uchar4 color = white;
+            //if (ball.isClipping_Ball) color = red;
+            //if (ball.isClipping_Wall) color = blue;
+            //if (ball.isClipping_Ball && ball.isClipping_Wall) color = purple;
+            //simState.pixels[index] = color;
+            simState.pixels[index] = ball.color;
             return;
         }
     }
@@ -156,10 +156,10 @@ void InteropOpenGL::executeKernels(SimulationState& simState)
     int BALLS_threadsPerBlock = 256;
     int BALLS_blocksPerGrid = (simState.balls.size + BALLS_threadsPerBlock - 1) / BALLS_threadsPerBlock;
 
-    for (int i = 0; i < 32; i++)
+    for (int i = 0; i < 16; i++)
     {
         resolveWallCollisions KERNEL_DIM(BALLS_blocksPerGrid, BALLS_threadsPerBlock)(simState); cudaDeviceSynchronize();
-        for (int j = 0; j < 4; j++)
+        for (int j = 0; j < 8; j++)
         {
             overlapResolutionKernel KERNEL_DIM(BALLS_blocksPerGrid, BALLS_threadsPerBlock)(simState); cudaDeviceSynchronize();
             applyDisplacementKernel KERNEL_DIM(BALLS_blocksPerGrid, BALLS_threadsPerBlock)(simState); cudaDeviceSynchronize();

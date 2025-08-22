@@ -37,7 +37,7 @@ inline void initSimulation(std::tuple<int, int> screenDim, SimulationState& simS
     {
         Ball ball;
         ball.color = make_uchar4(rand() % 255, rand() % 255, rand() % 255, 255);
-        ball.radius = 0.02f;
+        ball.radius = randomFloat(0.02f, 0.04f);
         ball.currPos.x = randomFloat(-simState.max_u, simState.max_u);
         ball.currPos.y = randomFloat(-1.0f, 1.0f);
         simState.balls.add(ball);
